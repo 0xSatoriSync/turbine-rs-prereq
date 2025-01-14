@@ -3,9 +3,13 @@ mod programs;
 #[cfg(test)] 
 mod tests {
 
+    use anchor_client::{
+        Client, Cluster,
+    };
     use bs58;
-    use crate::programs::turbin3_prereq::{
-        Turbin3PrereqProgram, CompleteArgs
+    use crate::programs::turbine_prereq::{
+        turbine_prereq::ID,
+        turbine_prereq::client,
     };
     use solana_client::rpc_client::RpcClient;
     use solana_program::{
@@ -14,12 +18,11 @@ mod tests {
         system_program
     };
     use solana_sdk::{
-        message::Message,
-        signature::{Keypair, Signer, read_keypair_file},
-        transaction::Transaction,
+        message::Message, signature::{read_keypair_file, Keypair, Signer}, transaction::Transaction
     };
     use std::{
         io::{self, BufRead},
+        rc::Rc,
         str::FromStr,
     };
     
@@ -131,34 +134,89 @@ mod tests {
     }
 
     #[test]
-    fn register() {
-        // Create a Solana devnet connection
-        let rpc_client = RpcClient::new(RPC_URL);
+    fn register() -> Result<(), Box<dyn std::error::Error>> {
+        
         // Let's define our accounts
-        let signer = read_keypair_file("wallets/turbin3-wallet.json")
+        let payer = read_keypair_file("wallets/turbin3-wallet.json")
             .expect("Couldn't find wallet file");
-        let prereq = Turbin3PrereqProgram::derive_program_address(
-            &[b"prereq", signer.pubkey().to_bytes().as_ref()]
+        
+        // Create a Solana devnet connection
+        let client = Client::new(Cluster::Devnet, Rc::new(&payer));
+        
+        // Create program
+        let program = client.program(ID)?;
+
+        // Create the PDA for the transaction
+        let (prereq, _bump) = Pubkey::find_program_address(
+            &[b"prereq", payer.pubkey().as_ref()],
+            &ID
         );
-        // Define our instruction data
-        let args = CompleteArgs{
-            github: b"0xSatoriSync".to_vec() 
+
+        // Define transaction accounts and arguments
+        let complete_accounts = client::accounts::Complete {
+            signer: payer.pubkey(),
+            prereq: prereq, 
+            system_program: system_program::id()
         };
-        // Get recent blockhash
-        let recent_blockhash = rpc_client.get_latest_blockhash()
-            .expect("Failed to get recent blockhash");
-        // Now we can invoke the "complete" function 
-        let transaction = Turbin3PrereqProgram::complete(
-            &[&signer.pubkey(), &prereq, &system_program::id()], 
-            &args, 
-            Some(&signer.pubkey()),
-            &[&signer],
-            recent_blockhash
-        );
-        // Send the transaction
-        let signature = rpc_client .send_and_confirm_transaction(&transaction) 
-            .expect("Failed to send transaction");
+        let complete_args = client::args::Complete {
+            github: b"0xSatoriSync".to_vec(),
+        };
+
+        // Send the TX
+        let signature = program
+           .request()
+           .accounts(complete_accounts)
+           .args(complete_args)
+           .signer(&payer)
+           .send()?;
+
         // Print our transaction out 
         println!("Success! Check out your TX here: https://explorer.solana.com/tx/{}/?cluster=devnet", signature);
+        Ok(())
+        
     }
+
+    #[test]
+    fn update() -> Result<(), Box<dyn std::error::Error>> {
+        
+        // Let's define our accounts
+        let payer = read_keypair_file("wallets/turbin3-wallet.json")
+            .expect("Couldn't find wallet file");
+        
+        // Create a Solana devnet connection
+        let client = Client::new(Cluster::Devnet, Rc::new(&payer));
+        
+        // Create program
+        let program = client.program(ID)?;
+
+        // Create the PDA for the transaction
+        let (prereq, _bump) = Pubkey::find_program_address(
+            &[b"prereq", payer.pubkey().as_ref()],
+            &ID
+        );
+
+        // Define transaction accounts and arguments
+        let update_accounts = client::accounts::Update {
+            signer: payer.pubkey(),
+            prereq: prereq, 
+            system_program: system_program::id()
+        };
+        let update_args = client::args::Update {
+            github: b"0xSatoriSync".to_vec(),
+        };
+
+        // Send the TX
+        let signature = program
+           .request()
+           .accounts(update_accounts)
+           .args(update_args)
+           .signer(&payer)
+           .send()?;
+
+        // Print our transaction out 
+        println!("Success! Check out your TX here: https://explorer.solana.com/tx/{}/?cluster=devnet", signature);
+        Ok(())
+
+    }
+
 }

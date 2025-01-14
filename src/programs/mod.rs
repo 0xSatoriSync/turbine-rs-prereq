@@ -1,2 +1,2 @@
 // Programs
-pub mod turbin3_prereq;
+pub mod turbine_prereq;
